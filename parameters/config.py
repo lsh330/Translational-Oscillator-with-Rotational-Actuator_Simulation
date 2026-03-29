@@ -17,10 +17,14 @@ class SystemConfig:
         Physical parameters (see PhysicalParams for units).
     """
 
-    def __init__(self, M=1.3608, m=0.096, e=0.0592, k=186.3, I=0.0002175):
+    def __init__(self, M=1.3608, m=0.096, e=0.0592, k=186.3, I=0.0002175,
+                 c_x=0.0, c_theta=0.0):
         for name, val in [("M", M), ("m", m), ("e", e), ("k", k), ("I", I)]:
             if not isinstance(val, (int, float)) or val <= 0:
                 raise ValueError(f"{name} must be a positive number, got {val}")
+        for name, val in [("c_x", c_x), ("c_theta", c_theta)]:
+            if not isinstance(val, (int, float)) or val < 0:
+                raise ValueError(f"{name} must be a non-negative number, got {val}")
 
         # Physical realizability checks
         Mt = M + m
@@ -49,7 +53,9 @@ class SystemConfig:
 
         self.physical = PhysicalParams(M=M, m=m, e=e, k=k, I=I)
         self.derived: DerivedParams = compute_derived(self.physical)
-        self._packed: np.ndarray = pack_params(self.derived)
+        self.c_x = c_x
+        self.c_theta = c_theta
+        self._packed: np.ndarray = pack_params(self.derived, c_x=c_x, c_theta=c_theta)
 
     def pack(self) -> np.ndarray:
         """Return packed parameter vector for JIT functions."""
@@ -64,5 +70,5 @@ class SystemConfig:
         pp = self.physical
         return (
             f"SystemConfig(M={pp.M}, m={pp.m}, e={pp.e}, "
-            f"k={pp.k}, I={pp.I})"
+            f"k={pp.k}, I={pp.I}, c_x={self.c_x}, c_theta={self.c_theta})"
         )

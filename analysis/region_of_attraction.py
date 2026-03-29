@@ -43,6 +43,9 @@ def estimate_roa(p, K, x_range=(-0.5, 0.5), theta_range=(-np.pi, np.pi),
     total = nx * ntheta
     converged = 0
 
+    # Memory-efficient: only final state checked, no full trajectory stored.
+    # For N=51x51=2601 trials at dt=0.002 for 10s (5000 steps),
+    # this uses O(1) memory per trial instead of O(5000*4) per trial.
     for i, x0 in enumerate(x_vals):
         for j, th0 in enumerate(theta_vals):
             x, theta, xd, td = x0, th0, 0.0, 0.0

@@ -7,6 +7,8 @@ system:
   e: 0.0592              # Eccentricity [m]
   k: 186.3               # Spring constant [N/m]
   I: 0.0002175           # Rotor inertia [kg*m^2]
+  c_x: 0.0               # Cart viscous damping [N*s/m] (0 = ideal benchmark)
+  c_theta: 0.0            # Rotor bearing damping [N*m*s/rad] (0 = ideal)
 
 simulation:
   t_end: 20.0            # Simulation duration [s]

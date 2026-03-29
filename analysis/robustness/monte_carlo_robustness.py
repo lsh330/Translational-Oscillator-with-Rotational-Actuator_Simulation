@@ -31,6 +31,9 @@ def monte_carlo_robustness(K, N_trials=300, t_horizon=5.0, dt=0.002,
     settling_times = []
     max_states = []
 
+    # Memory-efficient: only final state checked, no full trajectory stored.
+    # For N=51x51=2601 trials at dt=0.002 for 10s (5000 steps),
+    # this uses O(1) memory per trial instead of O(5000*4) per trial.
     for _ in range(N_trials):
         M_p = 1.3608 * (1.0 + 0.1 * rng.uniform(-1, 1))
         m_p = 0.096 * (1.0 + 0.1 * rng.uniform(-1, 1))

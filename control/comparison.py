@@ -66,7 +66,7 @@ def _simulate_controller(controller_fn, z0, p, dt, N, tau_max):
     return z_hist, u_hist
 
 
-def _compute_metrics(z_hist, u_hist, dt):
+def _compute_metrics(z_hist, u_hist, dt, tau_max=0.1):
     """Compute comprehensive performance metrics."""
     t = np.arange(len(z_hist)) * dt
     x = z_hist[:, 0]
@@ -95,6 +95,10 @@ def _compute_metrics(z_hist, u_hist, dt):
     # Saturation fraction (approximate — check if near limits)
     u_max_observed = np.max(np.abs(u_hist))
 
+    # Saturation fraction (count near tau_max)
+    sat_count = np.sum(np.abs(u_hist) >= tau_max * 0.99)
+    sat_fraction = sat_count / N if N > 0 else 0.0
+
     # Final state norm
     final_norm = np.linalg.norm(z_hist[-1])
 
@@ -108,6 +112,7 @@ def _compute_metrics(z_hist, u_hist, dt):
         "peak_theta": peak_theta,
         "peak_theta_dot": peak_theta_dot,
         "peak_torque": u_max_observed,
+        "sat_fraction": sat_fraction,
     }
 
 
@@ -141,7 +146,7 @@ def compare_controllers(p, K_lqr, ilqr_result=None,
         return -(K_flat[0] * x + K_flat[1] * theta + K_flat[2] * xd + K_flat[3] * td)
 
     z_lqr, u_lqr = _simulate_controller(lqr_ctrl, z0, p, dt, N, tau_max)
-    results["lqr"] = {"z": z_lqr, "u": u_lqr, "metrics": _compute_metrics(z_lqr, u_lqr, dt)}
+    results["lqr"] = {"z": z_lqr, "u": u_lqr, "metrics": _compute_metrics(z_lqr, u_lqr, dt, tau_max)}
 
     # 2. Energy-based
     eg = default_energy_gains(p)
@@ -150,7 +155,7 @@ def compare_controllers(p, K_lqr, ilqr_result=None,
         return energy_based_control(x, theta, xd, td, p, eg["kp"], eg["kd"], eg["kc"])
 
     z_eb, u_eb = _simulate_controller(energy_ctrl, z0, p, dt, N, tau_max)
-    results["energy"] = {"z": z_eb, "u": u_eb, "metrics": _compute_metrics(z_eb, u_eb, dt)}
+    results["energy"] = {"z": z_eb, "u": u_eb, "metrics": _compute_metrics(z_eb, u_eb, dt, tau_max)}
 
     # 3. SMC
     sg = default_smc_gains(p)
@@ -162,7 +167,7 @@ def compare_controllers(p, K_lqr, ilqr_result=None,
         )
 
     z_smc, u_smc = _simulate_controller(smc_ctrl, z0, p, dt, N, tau_max)
-    results["smc"] = {"z": z_smc, "u": u_smc, "metrics": _compute_metrics(z_smc, u_smc, dt)}
+    results["smc"] = {"z": z_smc, "u": u_smc, "metrics": _compute_metrics(z_smc, u_smc, dt, tau_max)}
 
     # 4. iLQR (if available)
     if ilqr_result is not None:
@@ -170,7 +175,7 @@ def compare_controllers(p, K_lqr, ilqr_result=None,
             "z": ilqr_result["z_traj"],
             "u": ilqr_result["u_traj"],
             "metrics": _compute_metrics(
-                ilqr_result["z_traj"], ilqr_result["u_traj"], dt
+                ilqr_result["z_traj"], ilqr_result["u_traj"], dt, tau_max
             ),
         }
 

@@ -20,7 +20,7 @@ def forward_dynamics(q, dq, tau, p):
     q   : float64[2]  Generalized coordinates [x, theta].
     dq  : float64[2]  Generalized velocities [x_dot, theta_dot].
     tau : float        Control torque on rotor [N*m].
-    p   : float64[4]  Packed parameters [Mt, me, I_eff, k].
+    p   : float64[6]  Packed parameters [Mt, me, I_eff, k, c_x, c_theta].
 
     Returns
     -------
@@ -44,9 +44,12 @@ def forward_dynamics(q, dq, tau, p):
     m01 = coupling
     m11 = I_eff
 
-    # RHS = B*tau - C - K
-    rhs0 = me * theta_dot * theta_dot * st - k * x
-    rhs1 = tau
+    c_x = p[4]
+    c_theta = p[5]
+
+    # RHS = B*tau - C - K - D
+    rhs0 = me * theta_dot * theta_dot * st - k * x - c_x * dq[0]
+    rhs1 = tau - c_theta * dq[1]
 
     # Cramer's rule for 2x2
     det = m00 * m11 - m01 * m01

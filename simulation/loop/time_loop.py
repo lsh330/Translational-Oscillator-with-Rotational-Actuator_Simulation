@@ -17,9 +17,10 @@ _log = get_logger("tora.sim")
 
 
 def simulate(cfg, controller_type="lqr", K=None,
-             t_end=20.0, dt=0.001, x0=0.1, tau_max=0.1,
+             t_end=20.0, dt=0.001, x0=0.1, theta0=0.0,
+             x_dot0=0.0, theta_dot0=0.0, tau_max=0.1,
              dist_amplitude=0.01, dist_bandwidth=5.0, seed=42,
-             dist_channel="torque"):
+             dist_channel="torque", integrator="rk4"):
     """Run a TORA simulation.
 
     Parameters
@@ -36,16 +37,20 @@ def simulate(cfg, controller_type="lqr", K=None,
     dist_channel    : str  Disturbance injection point. Currently "torque" only.
         "torque" — additive torque disturbance on rotor (default, benchmark standard)
         Future: "cart" for external cart force, "both" for combined.
+    integrator  : str  Integration method: "rk4" (default), "rk45", "stormer_verlet".
 
     Returns
     -------
     result : dict  Time histories and metadata.
     """
+    if integrator != "rk4":
+        _log.warning("Fast JIT loops use RK4 only. integrator='%s' applies to array-based path.", integrator)
+
     p = cfg.pack()
     N = int(t_end / dt)
     t = np.arange(N + 1) * dt
 
-    z0 = initial_displacement(x0)
+    z0 = np.array([x0, theta0, x_dot0, theta_dot0])
 
     # Generate disturbance
     dist = generate_disturbance(N, dt, dist_amplitude, dist_bandwidth, seed)

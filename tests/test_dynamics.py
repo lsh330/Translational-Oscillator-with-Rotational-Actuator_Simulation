@@ -150,6 +150,44 @@ class TestForwardDynamics:
         ddq = forward_dynamics(q, dq, 0.0, p)
         assert ddq[0] < 0  # Spring pulls cart back
 
+    def test_energy_drift_bound_rk4(self, p):
+        """RK4 energy drift should be bounded by O(dt^4) per step."""
+        from simulation.integrator.rk4_step import rk4_step
+
+        z = np.array([0.1, 0.3, 0.0, 0.0])
+        dt = 0.001
+        Mt, me, I_eff, k = p[0], p[1], p[2], p[3]
+
+        def energy(z):
+            x, theta, xd, td = z
+            T = 0.5 * (Mt * xd**2 + 2*me*np.cos(theta)*xd*td + I_eff*td**2)
+            V = 0.5 * k * x**2
+            return T + V
+
+        H_values = [energy(z)]
+        for _ in range(10000):
+            z = rk4_step(z, 0.0, p, dt)
+            H_values.append(energy(z))
+
+        H_arr = np.array(H_values)
+        drift = abs(H_arr[-1] - H_arr[0])
+        # RK4 should keep drift < 1% over 10s
+        assert drift < 0.01 * H_arr[0]
+
+    def test_det_M_positive_along_trajectory(self, p):
+        """det(M) must remain positive throughout simulation."""
+        from simulation.integrator.rk4_step import rk4_step
+        from dynamics.mass_matrix.assembly import mass_matrix
+
+        z = np.array([0.1, 0.5, 0.5, 2.0])
+        dt = 0.001
+
+        for _ in range(5000):
+            M = mass_matrix(z[1], p)
+            det = M[0,0] * M[1,1] - M[0,1] * M[1,0]
+            assert det > 0, f"det(M) = {det} at theta={z[1]}"
+            z = rk4_step(z, 0.0, p, dt)
+
     def test_symplectic_energy_conservation(self, p):
         """Störmer-Verlet should conserve energy to near-machine precision."""
         from simulation.integrator.stormer_verlet import stormer_verlet_step

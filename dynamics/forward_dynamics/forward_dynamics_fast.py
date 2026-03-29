@@ -18,7 +18,7 @@ def forward_dynamics_fast(x, theta, x_dot, theta_dot, tau, p):
     x, theta        : float  Generalized coordinates.
     x_dot, theta_dot: float  Generalized velocities.
     tau             : float  Rotor torque [N*m].
-    p               : float64[4]  Packed parameters.
+    p               : float64[6]  Packed parameters.
 
     Returns
     -------
@@ -36,9 +36,12 @@ def forward_dynamics_fast(x, theta, x_dot, theta_dot, tau, p):
     # Mass matrix elements
     coupling = me * ct
 
-    # RHS = B*tau - C(q,dq) - K(q)
-    rhs0 = me * theta_dot * theta_dot * st - k * x
-    rhs1 = tau
+    c_x = p[4]
+    c_theta = p[5]
+
+    # RHS = B*tau - C(q,dq) - K(q) - D(dq)
+    rhs0 = me * theta_dot * theta_dot * st - k * x - c_x * x_dot
+    rhs1 = tau - c_theta * theta_dot
 
     # 2x2 Cramer's rule: det = Mt*I_eff - (me*cos(theta))^2
     det = Mt * I_eff - coupling * coupling

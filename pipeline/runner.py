@@ -40,10 +40,12 @@ _log = get_logger("tora.runner")
 
 
 def run(cfg, t_end=20.0, dt=0.001, x0=0.1,
+        theta0=0.0, x_dot0=0.0, theta_dot0=0.0,
         controller_type="lqr", tau_max=0.1,
         dist_amplitude=0.01, dist_bandwidth=5.0, seed=42,
         use_ilqr=False, ilqr_horizon=1000, ilqr_iterations=15,
-        adaptive_q=False, compare_all=False, no_display=False):
+        adaptive_q=False, compare_all=False, no_display=False,
+        integrator="rk4"):
     """Execute the full TORA simulation pipeline."""
 
     p = cfg.pack()
@@ -63,8 +65,10 @@ def run(cfg, t_end=20.0, dt=0.001, x0=0.1,
     _log.info("Phase 2: Simulation (%s)", controller_type.upper())
     sim_result = simulate(
         cfg, controller_type=controller_type, K=K,
-        t_end=t_end, dt=dt, x0=x0, tau_max=tau_max,
+        t_end=t_end, dt=dt, x0=x0, theta0=theta0,
+        x_dot0=x_dot0, theta_dot0=theta_dot0, tau_max=tau_max,
         dist_amplitude=dist_amplitude, dist_bandwidth=dist_bandwidth, seed=seed,
+        integrator=integrator,
     )
 
     # 3. Analysis

@@ -70,7 +70,7 @@ def _linearize_at(q, dq, tau, p, dt):
     return A_d, B_d
 
 
-def ilqr(p, dt, horizon, max_iter=15, tol=1e-4, z0=None):
+def ilqr(p, dt, horizon, max_iter=15, tol=1e-4, z0=None, tau_max=0.1):
     """Run iLQR trajectory optimization.
 
     Parameters
@@ -81,6 +81,7 @@ def ilqr(p, dt, horizon, max_iter=15, tol=1e-4, z0=None):
     max_iter : int         Maximum iterations.
     tol      : float       Convergence tolerance on relative cost reduction.
     z0       : float64[4]  Initial state (default: [0.1, 0, 0, 0]).
+    tau_max  : float       Box constraint on control torque [N·m].
 
     Returns
     -------
@@ -147,7 +148,10 @@ def ilqr(p, dt, horizon, max_iter=15, tol=1e-4, z0=None):
             Q_ux = B_d.T @ V_xx @ A_d
             Q_uu = R_scalar * dt + B_d.T @ V_xx @ B_d
 
-            Q_uu_inv = 1.0 / (Q_uu[0, 0] + 1e-8)
+            # Levenberg-Marquardt regularization
+            mu = 1e-6  # regularization parameter
+            Q_uu_reg = Q_uu + mu * np.eye(1) * dt
+            Q_uu_inv = 1.0 / (Q_uu_reg[0, 0] + 1e-12)
 
             K_i = Q_uu_inv * Q_ux
             k_i = Q_uu_inv * Q_u
@@ -158,22 +162,35 @@ def ilqr(p, dt, horizon, max_iter=15, tol=1e-4, z0=None):
             V_x = Q_x - K_i.T @ (Q_uu @ k_i.reshape(-1, 1)).flatten()
             V_xx = Q_xx - K_i.T @ Q_uu @ K_i
 
-        # Forward pass with updated gains
-        z_new = np.zeros((N + 1, 4))
-        u_new = np.zeros(N)
-        z_new[0] = z0
-        alpha = 1.0  # Line search step size
+        # Armijo line search with box constraints
+        tau_max_ilqr = tau_max
+        for alpha in [1.0, 0.5, 0.25, 0.1, 0.05]:
+            z_trial = np.zeros((N + 1, 4))
+            u_trial = np.zeros(N)
+            z_trial[0] = z0
 
-        for i in range(N):
-            dz = z_new[i] - z_traj[i]
-            du = -k_traj[i, 0] - K_traj[i, 0, :] @ dz
-            u_new[i] = u_traj[i] + alpha * du
+            for i in range(N):
+                dz = z_trial[i] - z_traj[i]
+                du = -k_traj[i, 0] - K_traj[i, 0, :] @ dz
+                u_trial[i] = np.clip(u_traj[i] + alpha * du, -tau_max_ilqr, tau_max_ilqr)
 
-            q, dq = _state_unpack(z_new[i])
-            q_next, dq_next = _rk4_step(q, dq, u_new[i], p, dt)
-            z_new[i + 1] = _state_pack(q_next, dq_next)
+                q, dq = _state_unpack(z_trial[i])
+                q_next, dq_next = _rk4_step(q, dq, u_trial[i], p, dt)
+                z_trial[i + 1] = _state_pack(q_next, dq_next)
 
-        u_traj = u_new
+            # Compute trial cost
+            trial_cost = 0.0
+            for i in range(N):
+                z = z_trial[i]
+                u = u_trial[i]
+                trial_cost += 0.5 * (z @ Q @ z + R_scalar * u * u) * dt
+            trial_cost += 0.5 * z_trial[N] @ P_f @ z_trial[N]
+
+            if trial_cost < cost:
+                u_traj = u_trial
+                break
+        else:
+            u_traj = u_trial  # accept even if no improvement
 
     # Final rollout with the converged control sequence
     z_traj = np.zeros((N + 1, 4))

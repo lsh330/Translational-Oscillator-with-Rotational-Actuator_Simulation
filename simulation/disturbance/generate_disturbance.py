@@ -26,3 +26,17 @@ def generate_disturbance(N, dt, amplitude=0.01, bandwidth=5.0, seed=42):
     filtered = lowpass_filter(raw, dt, bandwidth)
     d = normalize_rms(filtered, amplitude)
     return d
+
+
+def generate_multi_disturbance(N, dt, tau_amplitude=0.01, force_amplitude=0.0,
+                                bandwidth=5.0, seed=42):
+    """Generate multi-channel disturbance signals.
+
+    Returns
+    -------
+    result : dict  Keys: torque_dist, force_dist.
+    """
+    rng_base = seed
+    torque_dist = generate_disturbance(N, dt, tau_amplitude, bandwidth, rng_base)
+    force_dist = generate_disturbance(N, dt, force_amplitude, bandwidth, rng_base + 1000)
+    return {"torque_dist": torque_dist, "force_dist": force_dist}

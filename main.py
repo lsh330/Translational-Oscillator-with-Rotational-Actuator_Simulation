@@ -29,11 +29,16 @@ def _build_parser():
     p.add_argument("--e", type=float, default=0.0592, help="Eccentricity [m]")
     p.add_argument("--k", type=float, default=186.3, help="Spring constant [N/m]")
     p.add_argument("--I", type=float, default=0.0002175, help="Rotor inertia [kg*m^2]")
+    p.add_argument("--c-x", type=float, default=0.0, help="Cart viscous damping [N*s/m]")
+    p.add_argument("--c-theta", type=float, default=0.0, help="Rotor bearing damping [N*m*s/rad]")
 
     # Simulation parameters
     p.add_argument("--t-end", type=float, default=20.0, help="Duration [s]")
     p.add_argument("--dt", type=float, default=0.001, help="Time step [s]")
     p.add_argument("--x0", type=float, default=0.1, help="Initial cart displacement [m]")
+    p.add_argument("--theta0", type=float, default=0.0, help="Initial rotor angle [rad]")
+    p.add_argument("--x-dot0", type=float, default=0.0, help="Initial cart velocity [m/s]")
+    p.add_argument("--theta-dot0", type=float, default=0.0, help="Initial rotor angular velocity [rad/s]")
     p.add_argument("--tau-max", type=float, default=0.1, help="Torque saturation [N*m]")
     p.add_argument("--dist-amplitude", type=float, default=0.01, help="Disturbance RMS [N*m]")
     p.add_argument("--dist-bandwidth", type=float, default=5.0, help="Disturbance bandwidth [Hz]")
@@ -108,11 +113,13 @@ def main(argv=None):
     feat_p = yaml_cfg.get("features", {})
 
     # Apply YAML values only if NOT explicitly set on CLI
-    for key in ["M", "m", "e", "k", "I"]:
+    for key in ["M", "m", "e", "k", "I", "c_x", "c_theta"]:
         if key in sys_p and key not in explicit:
             setattr(args, key, sys_p[key])
 
-    yaml_sim_map = {"t_end": "t_end", "dt": "dt", "x0": "x0", "tau_max": "tau_max",
+    yaml_sim_map = {"t_end": "t_end", "dt": "dt", "x0": "x0",
+                    "theta0": "theta0", "x_dot0": "x_dot0", "theta_dot0": "theta_dot0",
+                    "tau_max": "tau_max",
                     "dist_amplitude": "dist_amplitude", "dist_bandwidth": "dist_bandwidth",
                     "seed": "seed"}
     for ykey, attr in yaml_sim_map.items():
@@ -132,10 +139,12 @@ def main(argv=None):
     if args.tau_max < 0:
         print("ERROR: --tau-max must be non-negative"); sys.exit(1)
 
-    cfg = SystemConfig(M=args.M, m=args.m, e=args.e, k=args.k, I=args.I)
+    cfg = SystemConfig(M=args.M, m=args.m, e=args.e, k=args.k, I=args.I,
+                       c_x=args.c_x, c_theta=args.c_theta)
 
     run(cfg,
         t_end=args.t_end, dt=args.dt, x0=args.x0,
+        theta0=args.theta0, x_dot0=args.x_dot0, theta_dot0=args.theta_dot0,
         controller_type=args.controller, tau_max=args.tau_max,
         dist_amplitude=args.dist_amplitude,
         dist_bandwidth=args.dist_bandwidth,

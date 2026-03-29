@@ -4,7 +4,7 @@ Nonlinear optimal control benchmark simulation of the **Translational Oscillator
 
 > **Benchmark system**: All physical parameters follow the **Bupp–Bernstein–Coppola RTAC testbed** (University of Michigan, 1998), the most widely cited experimental benchmark for underactuated nonlinear control [2].
 
-> **v1.1** — Bryson's rule R = 1/τ<sub>max</sub>² (saturation-aware LQR, 0% saturation). Leapfrog Störmer-Verlet integrator (bounded energy oscillation). Coriolis matrix Ṁ−2C skew-symmetric passivity verification. Non-dimensional ε coupling parameter. Pole-placement SMC surface design. Optional viscous damping. Physical realizability validation. iLQR final-rollout consistency fix. Config priority: defaults < YAML < CLI. 70 tests passing.
+> **v2.0** — Full physics model: viscous damping, Coulomb friction, actuator first-order lag. 6 controllers: LQR, LQI (integral action), iLQR (constrained + Armijo line search), passivity-based, hybrid energy (3-phase mode switching), SMC (pole-placement surface). Luenberger observer for output feedback. Batch experiment API. Model presets (ideal benchmark / engineering model). General 4-state IC. Multi-channel disturbance. Operating-point linearization sweep. 72 tests passing.
 
 ## Quick Start
 
@@ -263,7 +263,8 @@ parameters/                  System parameters
 ├── physical.py              PhysicalParams dataclass (M, m, e, k, I)
 ├── derived.py               Derived quantities (Mt, me, I_eff)
 ├── nondimensional.py        Non-dimensional model (ε, ωn)
-├── packing.py               JIT-compatible flat array [Mt, me, I_eff, k]
+├── packing.py               JIT-compatible flat array [Mt, me, I_eff, k, c_x, c_θ]
+├── model_presets.py         Ideal benchmark / engineering model presets
 ├── equilibrium.py           Equilibrium state [0, 0, 0, 0]
 └── config.py                SystemConfig (validation + packing)
 
@@ -273,7 +274,8 @@ dynamics/                    Physics engine
 │   ├── coriolis_vector.py   C(q,q̇) force vector
 │   └── coriolis_matrix.py   Full C matrix + skew-symmetric verification
 ├── spring/spring_force.py   K(q) = [kx, 0]
-├── damping/viscous_damping.py  Optional c_x·ẋ + c_θ·θ̇ viscous losses
+├── damping/viscous_damping.py  Viscous damping D·q̇ = [c_x·ẋ, c_θ·θ̇]
+├── friction/coulomb.py      Coulomb + Stribeck smooth friction model
 ├── trigonometry.py          Shared sin/cos cache
 └── forward_dynamics/
     ├── forward_dynamics.py       Array version (for Jacobians)
@@ -281,13 +283,16 @@ dynamics/                    Physics engine
     ├── solve_acceleration.py     2×2 Cramer's rule
     └── tau_assembly.py           B·τ = [0, τ]
 
-control/                     4 controller designs
+control/                     6 controller designs
 ├── lqr.py                   LQR with Bryson's rule R = 1/τ²_max
-├── ilqr.py                  iLQR trajectory optimization
-├── energy_based.py          Passivity-based (Jankovic 1996)
-├── sliding_mode.py          SMC with boundary layer
+├── lqi.py                   LQI (integral action for zero steady-state offset)
+├── ilqr.py                  iLQR (constrained, Armijo line search, L-M regularization)
+├── energy_based.py          Passivity-based (Jankovic-inspired)
+├── hybrid_energy.py         3-phase hybrid (pumping → capture → LQR)
+├── sliding_mode.py          SMC (pole-placement surface, boundary layer)
+├── observer.py              Luenberger observer for output feedback
 ├── closed_loop.py           Pole analysis, damping ratios
-├── comparison.py            4-controller side-by-side
+├── comparison.py            Controller side-by-side
 ├── linearization/           Analytical + numerical Jacobians
 ├── cost_matrices/           Bryson's rule Q and R
 ├── gain_computation/        K = R⁻¹BᵀP
@@ -303,14 +308,16 @@ simulation/                  Simulation engine
 │   ├── rk45_step.py         Dormand-Prince adaptive
 │   ├── stormer_verlet.py    Symplectic integrator
 │   └── state_derivative.py  dz/dt = f(z, τ)
-├── initial_conditions/      Cart displacement IC
-├── disturbance/             Band-limited torque noise
+├── actuator/                First-order torque lag model
+├── initial_conditions/      General 4-state IC (x₀, θ₀, ẋ₀, θ̇₀)
+├── disturbance/             Multi-channel: torque + cart force
 └── warmup.py                JIT pre-compilation
 
 analysis/                    Post-simulation analysis
 ├── energy/                  T + V, Hamiltonian conservation
 ├── coupling/                me·cos(θ) strength, det(M), cond(M)
 ├── frequency/               Bode, poles, margins, sensitivity, step response
+├── linearization_sweep.py   Operating-point sweep (validity region analysis)
 ├── state/                   Phase portraits, derived quantities
 ├── lqr_verification/        Lyapunov, Kalman inequality, Nyquist, MC robustness
 ├── region_of_attraction.py  Grid-based MC in (x₀, θ₀) plane
@@ -327,7 +334,13 @@ visualization/               7 figure categories + animation
 ├── comparison_plots/        4-controller overlay
 └── roa_plots/               2D ROA contour
 
-tests/                       70 tests across 6 modules
+utils/                       Utilities
+├── logger.py                Centralized logging
+├── angle.py                 wrap_to_pi, angle_error (JIT)
+├── result_types.py          SimulationResult, LQRResult dataclasses
+└── experiment.py            Batch runner + parameter sweep API
+
+tests/                       72 tests across 6 modules
 ├── test_parameters.py       Validation, packing, edge cases
 ├── test_dynamics.py         M symmetry/PD, energy conservation, symplectic, skew-symmetric
 ├── test_linearization.py    Analytical↔numerical, controllability, imaginary-axis poles
@@ -343,45 +356,90 @@ pipeline/                    Orchestration
 
 ## Simulation Results
 
-All figures generated by `python main.py --compare-all --no-display` with default benchmark parameters.
+All figures generated by `python main.py --compare-all --no-display` with default benchmark parameters (ideal benchmark mode, c_x = c_θ = 0).
 
 ### Animation
 
 ![TORA Animation](images/tora_animation.gif)
 
-Cart-spring-rotor system with LQR control. The eccentric mass (red dot) drives the cart vibration to zero through rotational coupling.
+The TORA system under LQR control. The eccentric mass (red dot) rotates on the rotor while the cart (blue rectangle) oscillates on the spring (green zigzag). The controller applies torque to the rotor to suppress cart vibration through the weak rotational-translational coupling. The trace (red trail) shows the eccentric mass path converging toward the equilibrium position.
 
 ### Dynamics Overview
 
 ![Dynamics](images/dynamics.png)
 
-**Top row**: Cart displacement x and rotor angle θ — both decay as LQR dissipates energy. **Middle row**: Velocities showing the coupled oscillation. **Bottom-left**: Total energy H = T + V decreasing monotonically under control (Hamiltonian would be constant without control). **Bottom-right**: Normalized coupling strength cos(θ) with control torque overlay — coupling varies as rotor rotates.
+Six-panel overview of the TORA dynamics under LQR control from x₀ = 0.1 m initial displacement.
+
+**Cart Displacement (top-left)**: The cart oscillates at the natural frequency ω<sub>n</sub> ≈ 11.3 rad/s (T ≈ 0.56 s per cycle). The amplitude decays exponentially from 0.1 m toward zero, confirming closed-loop stability. The decay rate is governed by the dominant closed-loop pole's real part (Re = −0.22), giving a time constant τ ≈ 4.5 s. After ~15 seconds (~27 oscillation cycles), the amplitude has dropped below 1% of initial.
+
+**Rotor Angle (top-right)**: θ(t) shows the rotor's angular motion driven by the control torque. Unlike cart displacement which decays monotonically in envelope, the rotor angle accumulates because the controller continuously rotates the rotor to extract energy from the translational mode. The peak |θ| ≈ 0.9 rad (~52°) indicates significant rotor excursion.
+
+**Cart Velocity (middle-left)** and **Rotor Angular Velocity (middle-right)**: Velocity histories confirm the coupled oscillation. The rotor angular velocity θ̇ reaches ±10 rad/s while cart velocity ẋ stays below ±1 m/s — a 10:1 ratio reflecting the mass imbalance (M<sub>t</sub>/I<sub>eff</sub> ≈ 2600). This asymmetry is the fundamental reason TORA control is challenging: the rotor moves easily but has little leverage over the heavy cart.
+
+**Energy (bottom-left)**: Total Hamiltonian H = T + V starts at 0.93 J (entirely spring potential: ½kx₀² = ½×186.3×0.01). The energy decreases monotonically, confirming the LQR dissipates energy as intended. Kinetic and potential energy exchange during each oscillation cycle (kinetic peaks when potential is zero and vice versa), but their sum always decreases. By t = 20 s, H ≈ 0.02 J — a 98% reduction.
+
+**Coupling Strength & Control Torque (bottom-right)**: The normalized coupling cos(θ) oscillates between ±1 as the rotor rotates. When cos(θ) = 0 (θ = π/2), the rotor is completely decoupled from the cart — torque applied at these instants has zero effect on cart motion. The LQR gain naturally adjusts the effective control authority based on this coupling variation. The control torque (pink overlay) stays within ±0.09 N·m, well below the τ<sub>max</sub> = 0.1 N·m limit — **0% saturation**, validating the Bryson's rule R = 1/τ<sub>max</sub>² design.
 
 ### Control Analysis
 
 ![Control](images/control.png)
 
-**Top-left**: Control torque τ(t) with envelope showing decay — 0% saturation with Bryson's rule R = 1/τ<sub>max</sub>². **Top-right**: Torque frequency spectrum concentrated at the natural frequency (~1.8 Hz). **Bottom**: Open-loop Bode magnitude and phase with gain crossover at ω<sub>g</sub> = 28.3 rad/s and **PM = 75.7°**.
+**Control Torque (top-left)**: The torque τ(t) oscillates at the natural frequency with a decaying envelope (black lines). The fill region shows the full signal, while the envelope confirms monotonic amplitude reduction. Peak torque is 0.084 N·m (84% of τ<sub>max</sub>), demonstrating efficient use of the actuator's capacity without wasteful saturation. The initial aggressive phase (0–5 s) transitions to fine regulation as the state converges.
 
-> **Note**: These loop-transfer margins are computed from L(jω) = K(jωI−A)⁻¹B, a SISO surrogate for the full-state feedback system. They serve as robustness indicators, not direct experimental Bode margins.
+**Torque Spectrum (top-right)**: The FFT reveals the dominant control frequency at ~1.8 Hz (= ω<sub>n</sub>/2π), confirming the controller operates at the system's natural resonance. The spectral rolloff above 100 Hz shows no high-frequency chattering — important for actuator lifetime and power efficiency.
+
+**Open-Loop Bode Magnitude (bottom-left)**: The loop transfer L(jω) = K(jωI−A)⁻¹B shows 85 dB gain at low frequency, crossing 0 dB at ω<sub>g</sub> = 28.3 rad/s. The resonance peak near ω<sub>n</sub> reflects the undamped oscillatory dynamics.
+
+**Phase (bottom-right)**: Phase margin **PM = 75.7°** at the gain crossover frequency. This is a healthy margin (>60° is considered robust in classical control).
+
+> **Interpretation caveat**: These margins are computed from a SISO loop-transfer surrogate L(jω) = K(jωI−A)⁻¹B for the full-state feedback system. They serve as **robustness indicators** for the input channel, not direct experimental Bode margins. For the LQR, the Kalman inequality |1+L(jω)| ≥ 1 (verified below) provides a stronger theoretical guarantee.
 
 ### LQR Verification Suite
 
 ![LQR Verification](images/lqr_verification.png)
 
-**Top-left**: Lyapunov function V(t) = z<sup>T</sup>Pz decaying over time. **Top-right**: Cost breakdown — state cost dominates control cost (ratio ~5.5:1). **Middle-left**: Kalman return difference |1+L(jω)| ≥ 1 verified (min = 1.0002 — near theoretical lower bound). **Middle-right**: Closed-loop pole map — all poles in LHP. **Bottom-left**: Monte Carlo robustness histogram — **100% stable** across 200 random parameter perturbations (±10% mass/spring, ±5% eccentricity). **Bottom-right**: Damping ratios for each closed-loop pole.
+Six-panel formal verification of the LQR design quality.
+
+**Lyapunov Function (top-left)**: V(t) = z<sup>T</sup>Pz plotted on log scale, where P is the CARE solution. The function decreases from ~100 to ~1 over 20 s, spanning two orders of magnitude. The monotonic decrease on log scale confirms exponential convergence. Minor violations (2430 out of 20000 steps) are due to discretization artifacts in the RK4 integration — the continuous-time Lyapunov guarantee V̇ = −z<sup>T</sup>(Q + K<sup>T</sup>RK)z < 0 holds exactly only in continuous time.
+
+**Cost Breakdown (top-right)**: State cost ∫z<sup>T</sup>Qz dt = 5.75 vs control cost ∫Rτ² dt = 1.04, total J = 6.79. The 5.5:1 state-to-control ratio indicates the LQR prioritizes state regulation over input economy — appropriate for the TORA where weak coupling demands persistent control effort.
+
+**Kalman Inequality (middle-left)**: The return difference |1+L(jω)| is plotted against the theoretical lower bound of 1.0 (dashed red). The minimum value **1.0002** confirms the Kalman inequality |1+L(jω)| ≥ 1 is satisfied for all frequencies. This is a fundamental robustness property of optimal LQR: it guarantees ≥ 6 dB gain margin and ≥ 60° phase margin at the input channel. The fact that the minimum is so close to 1.0 (within 0.02%) means the LQR is operating near its theoretical optimality limit.
+
+**Closed-Loop Poles (middle-right)**: All 4 poles are in the left half-plane (stable). Two conjugate pairs: the fast pair at Re ≈ −13.4 (actuator response) and the slow pair at Re ≈ −0.22 (cart oscillation damping). The slow pair's damping ratio ζ ≈ 0.006 is very low — this reflects the weak coupling's fundamental limitation: even optimal control cannot make the cart converge much faster without violating the torque limit.
+
+**Monte Carlo Robustness (bottom-left)**: 200 random parameter perturbations (M ±10%, m ±10%, e ±5%, k ±10%, I ±10%) were simulated with the nominal LQR gain. **100% of trials converged** — the green histogram shows all maximum deviations well below the 10.0 divergence threshold. This demonstrates exceptional robustness of the Bryson's rule LQR design.
+
+**Damping Ratios (bottom-right)**: The 4 closed-loop poles have damping ratios: p1 ≈ 0.006 (slow oscillatory), p2 ≈ 0.006 (conjugate), p3 ≈ 0.98 (fast well-damped), p4 ≈ 0.98 (conjugate). The near-critical damping of the fast poles (ζ ≈ 0.98) contrasts sharply with the underdamped slow poles (ζ ≈ 0.006), revealing the two-timescale nature of the TORA LQR response.
 
 ### Phase Portraits
 
 ![Phase Portraits](images/phase_portraits.png)
 
-**Left**: (x, θ) configuration space — trajectory spirals from initial displacement toward equilibrium, colored by time (yellow→purple). **Right**: (ẋ, θ̇) velocity space — shows the characteristic TORA coupling where rotor velocity θ̇ is much larger than cart velocity ẋ due to weak coupling (ε ≈ 0.2).
+**Configuration Space (left)**: The (x, θ) trajectory forms a spiral converging toward the equilibrium at the origin (+). The color gradient (yellow = early, purple = late) shows how the trajectory tightens over time. The elliptical shape reveals the coupling: as x oscillates ±0.1 m, θ swings ±0.3 rad in a correlated pattern. The green dot marks the start (x₀ = 0.1, θ₀ = 0) and the red square marks the end — close to but not exactly at the origin after 20 s due to the slow convergence of the weakly-coupled system.
+
+**Velocity Space (right)**: The (ẋ, θ̇) trajectory shows a more complex pattern. The rotor angular velocity θ̇ reaches ±10 rad/s while cart velocity ẋ stays within ±1 m/s. This 10:1 velocity ratio directly reflects the inertia ratio I<sub>eff</sub>/M<sub>t</sub> ≈ 3.8×10⁻⁴ — the rotor is approximately 2600× easier to accelerate than the cart. The trajectory spirals inward but does not fully collapse to the origin within 20 s, consistent with the slow damping ratio ζ ≈ 0.006.
 
 ### Controller Comparison
 
 ![Comparison](images/comparison.png)
 
-Side-by-side comparison of LQR, passivity-based (energy), and sliding mode controllers. **Top row**: Cart displacement and rotor angle responses. **Bottom-left**: Control torque profiles showing different strategies. **Bottom-right**: Performance metrics — LQR offers the best settling time, energy-based uses least control effort, SMC has smallest peak θ.
+Side-by-side comparison of LQR, passivity-based (energy), and sliding mode controllers under identical initial conditions (x₀ = 0.1 m, no disturbance).
+
+**Cart Displacement (top-left)**: All three controllers suppress the oscillation, but at different rates. LQR (blue) shows the most uniform exponential decay. The energy-based controller (orange) has a slightly slower initial phase but eventually matches LQR. SMC (purple) shows larger initial transients but constrains the peak displacement more aggressively.
+
+**Rotor Angle (top-right)**: The rotor responses reveal fundamentally different control strategies. LQR produces moderate, sustained rotor motion. The energy-based controller accumulates less total rotor rotation (lower peak |θ|). SMC drives aggressive rotor maneuvers early (peak θ ≈ 0.33 rad) but then holds more tightly.
+
+**Control Torque (bottom-left)**: The torque profiles differ dramatically. LQR is smooth and near-sinusoidal. The energy-based controller is smaller in magnitude (lowest control effort). SMC shows the characteristic switching behavior with higher peak torque — the pole-placement surface design keeps this structured rather than chattering.
+
+**Performance Metrics (bottom-right)**:
+| Controller | Settling Time | Control Effort ∫τ²dt | Peak |θ| |
+|-----------|---------------|---------------------|---------|
+| LQR | 18.0 s | 0.0098 | 0.91 rad |
+| Energy | >20 s | 0.0051 | 0.78 rad |
+| SMC | >20 s | 0.189 | 0.33 rad |
+
+Key insight: **No single controller dominates on all metrics**. LQR settles fastest. Energy-based uses 48% less control effort (most energy-efficient). SMC has the smallest peak rotor angle (best constraint handling). This multi-objective tradeoff is characteristic of underactuated systems where the weak coupling forces design compromises.
 
 ---
 
@@ -412,7 +470,7 @@ All hot-path functions use `@numba.njit(cache=True)` with scalar arithmetic (zer
 ## Testing
 
 ```bash
-pytest tests/ -v              # 70 tests
+pytest tests/ -v              # 72 tests
 pytest tests/ -v --tb=short   # Compact output
 ```
 

@@ -49,7 +49,7 @@ class TestPacking:
         pp = PhysicalParams()
         dp = compute_derived(pp)
         p = pack_params(dp)
-        assert p.shape == (4,)
+        assert p.shape == (6,)
         assert p.dtype == np.float64
 
 
@@ -69,7 +69,7 @@ class TestSystemConfig:
     def test_pack(self):
         cfg = SystemConfig()
         p = cfg.pack()
-        assert p.shape == (4,)
+        assert p.shape == (6,)
 
     def test_equilibrium(self):
         cfg = SystemConfig()

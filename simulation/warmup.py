@@ -15,7 +15,7 @@ def warmup():
     """Trigger JIT compilation for all hot-path functions."""
     _log.info("JIT warmup starting...")
 
-    p = np.array([1.4568, 0.005683, 0.000554, 186.3])
+    p = np.array([1.4568, 0.005683, 0.000554, 186.3, 0.0, 0.0])
 
     # Forward dynamics (array)
     from dynamics.forward_dynamics.forward_dynamics import forward_dynamics
