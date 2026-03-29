@@ -44,8 +44,7 @@ def run(cfg, t_end=20.0, dt=0.001, x0=0.1,
         controller_type="lqr", tau_max=0.1,
         dist_amplitude=0.01, dist_bandwidth=5.0, seed=42,
         use_ilqr=False, ilqr_horizon=1000, ilqr_iterations=15,
-        adaptive_q=False, compare_all=False, no_display=False,
-        integrator="rk4"):
+        adaptive_q=False, compare_all=False, no_display=False):
     """Execute the full TORA simulation pipeline."""
 
     p = cfg.pack()
@@ -68,7 +67,6 @@ def run(cfg, t_end=20.0, dt=0.001, x0=0.1,
         t_end=t_end, dt=dt, x0=x0, theta0=theta0,
         x_dot0=x_dot0, theta_dot0=theta_dot0, tau_max=tau_max,
         dist_amplitude=dist_amplitude, dist_bandwidth=dist_bandwidth, seed=seed,
-        integrator=integrator,
     )
 
     # 3. Analysis

@@ -8,6 +8,8 @@ COLORS = {
     "energy": "#FF9800",     # orange
     "smc": "#9C27B0",        # purple
     "ilqr": "#4CAF50",       # green
+    "lqi": "#00BCD4",        # cyan
+    "hybrid": "#795548",     # brown
     "control": "#E91E63",    # pink
     "energy_total": "#333333",
     "energy_kinetic": "#F44336",
@@ -20,4 +22,6 @@ LABELS = {
     "energy": "Energy-Based",
     "smc": "Sliding Mode",
     "ilqr": "iLQR",
+    "lqi": "LQI",
+    "hybrid": "Hybrid Energy",
 }

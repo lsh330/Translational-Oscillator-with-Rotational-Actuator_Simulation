@@ -45,12 +45,14 @@ def _build_parser():
     p.add_argument("--seed", type=int, default=42, help="Random seed")
 
     # Controller selection
-    p.add_argument("--controller", choices=["lqr", "energy", "smc"],
-                   default="lqr", help="Controller type")
+    p.add_argument("--controller", choices=["lqr", "lqi", "energy", "hybrid", "smc"],
+                   default="lqr", help="Controller: lqr, lqi, energy, hybrid, smc")
     p.add_argument("--use-ilqr", action="store_true", help="Enable iLQR optimization")
     p.add_argument("--ilqr-horizon", type=int, default=1000, help="iLQR horizon steps")
     p.add_argument("--ilqr-iterations", type=int, default=15, help="iLQR max iterations")
     p.add_argument("--compare-all", action="store_true", help="Compare all controllers")
+    p.add_argument("--friction-coulomb", type=float, default=0.0, help="Coulomb friction magnitude [N or N*m]")
+    p.add_argument("--actuator-lag", type=float, default=0.0, help="Actuator time constant [s] (0=ideal)")
     p.add_argument("--adaptive-q", action="store_true", help="Use Bryson's rule Q matrix")
 
     # Config file

@@ -1,23 +1,42 @@
 # TORA Nonlinear Optimal Control Simulator
 
-Nonlinear optimal control benchmark simulation of the **Translational Oscillator with Rotational Actuator (TORA)** system, featuring four controller designs (LQR, iLQR, passivity-based, sliding mode), comprehensive analysis, and publication-quality visualizations.
+Nonlinear optimal control benchmark simulation of the **Translational Oscillator with Rotational Actuator (TORA)** system. Five CLI-selectable controllers (LQR, LQI, energy-based, hybrid energy, SMC) with comprehensive dynamics analysis and publication-quality visualizations.
 
 > **Benchmark system**: All physical parameters follow the **Bupp–Bernstein–Coppola RTAC testbed** (University of Michigan, 1998), the most widely cited experimental benchmark for underactuated nonlinear control [2].
 
-> **v2.0** — Full physics model: viscous damping, Coulomb friction, actuator first-order lag. 6 controllers: LQR, LQI (integral action), iLQR (constrained + Armijo line search), passivity-based, hybrid energy (3-phase mode switching), SMC (pole-placement surface). Luenberger observer for output feedback. Batch experiment API. Model presets (ideal benchmark / engineering model). General 4-state IC. Multi-channel disturbance. Operating-point linearization sweep. 72 tests passing.
+> **v2.1** — 5 CLI-selectable controllers: LQR, LQI, energy-based, hybrid energy, SMC. All wired into main pipeline. Viscous damping integrated into dynamics (c_x, c_θ). Luenberger observer, iLQR (constrained + Armijo), Coulomb friction, actuator lag available as library modules. Model presets (ideal/engineering). 91 tests passing.
+
+### Feature Integration Status
+
+| Feature | Status | CLI/Pipeline | Notes |
+|---------|--------|-------------|-------|
+| LQR (Bryson's rule) | **Integrated** | `--controller lqr` | Default, 0% saturation |
+| LQI (integral action) | **Integrated** | `--controller lqi` | Zero steady-state offset |
+| Energy-based (Jankovic) | **Integrated** | `--controller energy` | Passivity-based |
+| Hybrid energy (3-phase) | **Integrated** | `--controller hybrid` | Pumping → capture → LQR |
+| SMC (pole-placement) | **Integrated** | `--controller smc` | Boundary layer |
+| iLQR (constrained) | **Integrated** | `--compare-all` | Armijo + L-M regularization |
+| Viscous damping | **Integrated** | `--c-x`, `--c-theta` | In forward dynamics |
+| Luenberger observer | Library module | `control.observer` | For custom code |
+| Coulomb friction | Library module | `dynamics.friction` | For custom code |
+| Actuator lag | Library module | `simulation.actuator` | For custom code |
+| Batch experiment | Library module | `utils.experiment` | `run_batch()` API |
 
 ## Quick Start
 
 ```bash
 pip install -e ".[test]"
 python main.py                            # Default LQR simulation
-python main.py --compare-all              # Compare all 4 controllers
-python main.py --controller energy        # Passivity-based (Jankovic benchmark)
+python main.py --compare-all              # Compare all controllers
+python main.py --controller lqi           # LQI (integral action)
+python main.py --controller energy        # Passivity-based (Jankovic)
+python main.py --controller hybrid        # 3-phase hybrid energy
 python main.py --controller smc           # Sliding mode control
-python main.py --use-ilqr --compare-all   # Include iLQR trajectory optimization
-python main.py --adaptive-q               # Inertia-scaled Q matrix (Bryson's rule)
+python main.py --c-x 0.5 --c-theta 0.001 # With viscous damping
+python main.py --use-ilqr --compare-all   # Include iLQR
+python main.py --adaptive-q               # Bryson's rule Q matrix
 python prebuild_cache.py                  # Pre-build JIT cache
-pytest                                    # Run tests (70 tests)
+pytest                                    # Run tests (91 tests)
 ```
 
 ## Installation
@@ -470,7 +489,7 @@ All hot-path functions use `@numba.njit(cache=True)` with scalar arithmetic (zer
 ## Testing
 
 ```bash
-pytest tests/ -v              # 72 tests
+pytest tests/ -v              # 91 tests
 pytest tests/ -v --tb=short   # Compact output
 ```
 

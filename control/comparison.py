@@ -169,7 +169,44 @@ def compare_controllers(p, K_lqr, ilqr_result=None,
     z_smc, u_smc = _simulate_controller(smc_ctrl, z0, p, dt, N, tau_max)
     results["smc"] = {"z": z_smc, "u": u_smc, "metrics": _compute_metrics(z_smc, u_smc, dt, tau_max)}
 
-    # 4. iLQR (if available)
+    # 4. Hybrid Energy
+    from control.hybrid_energy import hybrid_energy_control
+    from control.energy_based import default_energy_gains as _deg
+    _eg = _deg(p)
+    K_flat_h = K_lqr.flatten()
+
+    def hybrid_ctrl(x, theta, xd, td):
+        tau, mode = hybrid_energy_control(x, theta, xd, td, p, K_flat_h,
+                                           _eg["kp"], _eg["kd"], _eg["kc"])
+        return tau
+
+    z_hyb, u_hyb = _simulate_controller(hybrid_ctrl, z0, p, dt, N, tau_max)
+    results["hybrid"] = {"z": z_hyb, "u": u_hyb, "metrics": _compute_metrics(z_hyb, u_hyb, dt, tau_max)}
+
+    # 5. LQI (needs integral state — use specialized loop)
+    from control.lqi import compute_lqi
+    try:
+        lqi_res = compute_lqi(p, tau_max=tau_max)
+        K_aug_flat = lqi_res["K_aug"].flatten()
+
+        z_lqi = np.zeros((N + 1, 4))
+        u_lqi = np.zeros(N)
+        z_lqi[0] = z0
+        int_x = 0.0
+        from simulation.integrator.rk4_step import rk4_step_fast
+        for i in range(N):
+            x, theta, xd, td = z_lqi[i]
+            tau = -(K_aug_flat[0]*x + K_aug_flat[1]*theta + K_aug_flat[2]*xd + K_aug_flat[3]*td + K_aug_flat[4]*int_x)
+            tau = np.clip(tau, -tau_max, tau_max)
+            u_lqi[i] = tau
+            nx, nth, nxd, ntd = rk4_step_fast(x, theta, xd, td, tau, p, dt)
+            z_lqi[i+1] = [nx, nth, nxd, ntd]
+            int_x += x * dt
+        results["lqi"] = {"z": z_lqi, "u": u_lqi, "metrics": _compute_metrics(z_lqi, u_lqi, dt, tau_max)}
+    except Exception as e:
+        _log.warning("LQI comparison failed: %s", e)
+
+    # 6. iLQR (if available)
     if ilqr_result is not None:
         results["ilqr"] = {
             "z": ilqr_result["z_traj"],
@@ -181,7 +218,7 @@ def compare_controllers(p, K_lqr, ilqr_result=None,
 
     # Summary
     _log.info("=== Controller Comparison ===")
-    for name in ["lqr", "energy", "smc", "ilqr"]:
+    for name in ["lqr", "energy", "smc", "hybrid", "lqi", "ilqr"]:
         if name in results and name != "t":
             m = results[name]["metrics"]
             _log.info("  %-8s  settle=%.2fs  effort=%.4f  peak_θ=%.3f  final=%.2e",

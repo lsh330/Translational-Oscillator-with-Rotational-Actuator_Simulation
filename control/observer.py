@@ -11,7 +11,7 @@ observer poles faster than controller poles.
 """
 
 import numpy as np
-from scipy.linalg import place_poles
+from scipy.signal import place_poles
 from numba import njit
 
 from control.linearization.linearize import linearize

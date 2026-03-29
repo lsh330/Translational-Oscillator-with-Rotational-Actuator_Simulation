@@ -5,6 +5,17 @@ from typing import Optional
 import numpy as np
 
 
+def from_sim_dict(d):
+    """Convert a simulation result dict to SimulationResult."""
+    return SimulationResult(
+        t=d["t"], x=d["x"], theta=d["theta"],
+        x_dot=d["x_dot"], theta_dot=d["theta_dot"],
+        u=d["u"], disturbance=d.get("disturbance", np.array([])),
+        sat_count=d["sat_count"], controller=d["controller"],
+        u_raw=d.get("u_raw"), s=d.get("s"),
+    )
+
+
 @dataclass
 class SimulationResult:
     """Container for time-domain simulation output."""
