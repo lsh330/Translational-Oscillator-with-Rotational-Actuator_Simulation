@@ -93,10 +93,11 @@ def _pole_analysis(poles_cl):
     }
 
 
-def _monte_carlo_robustness(cfg_class, p_nominal, K, N_trials=200, seed=42):
+def _monte_carlo_robustness(physical_params, K, N_trials=200, seed=42):
     """Monte Carlo robustness test with parameter perturbations.
 
-    Perturbs: M ±10%, m ±10%, e ±5%, k ±10%, I ±10%.
+    Perturbs around the ACTUAL physical parameters (not hardcoded benchmark values).
+    Perturbation: M ±10%, m ±10%, e ±5%, k ±10%, I ±10%.
     """
     from simulation.integrator.rk4_step import rk4_step_fast
     rng = np.random.default_rng(seed)
@@ -105,13 +106,20 @@ def _monte_carlo_robustness(cfg_class, p_nominal, K, N_trials=200, seed=42):
     stable_count = 0
     max_deviations = []
 
+    # Use actual parameters as perturbation center
+    M_nom = physical_params["M"]
+    m_nom = physical_params["m"]
+    e_nom = physical_params["e"]
+    k_nom = physical_params["k"]
+    I_nom = physical_params["I"]
+
     for trial in range(N_trials):
         # Perturb parameters
-        M_pert = 1.3608 * (1.0 + 0.1 * (2.0 * rng.random() - 1.0))
-        m_pert = 0.096 * (1.0 + 0.1 * (2.0 * rng.random() - 1.0))
-        e_pert = 0.0592 * (1.0 + 0.05 * (2.0 * rng.random() - 1.0))
-        k_pert = 186.3 * (1.0 + 0.1 * (2.0 * rng.random() - 1.0))
-        I_pert = 0.0002175 * (1.0 + 0.1 * (2.0 * rng.random() - 1.0))
+        M_pert = M_nom * (1.0 + 0.1 * (2.0 * rng.random() - 1.0))
+        m_pert = m_nom * (1.0 + 0.1 * (2.0 * rng.random() - 1.0))
+        e_pert = e_nom * (1.0 + 0.05 * (2.0 * rng.random() - 1.0))
+        k_pert = k_nom * (1.0 + 0.1 * (2.0 * rng.random() - 1.0))
+        I_pert = I_nom * (1.0 + 0.1 * (2.0 * rng.random() - 1.0))
 
         Mt_p = M_pert + m_pert
         me_p = m_pert * e_pert
@@ -148,14 +156,15 @@ def _monte_carlo_robustness(cfg_class, p_nominal, K, N_trials=200, seed=42):
     }
 
 
-def lqr_verification(sim_result, lqr_result, cfg_class=None):
+def lqr_verification(sim_result, lqr_result, physical_params=None):
     """Run complete LQR verification suite.
 
     Parameters
     ----------
-    sim_result : dict  From simulate().
-    lqr_result : dict  From compute_lqr().
-    cfg_class  : class or None  SystemConfig class for MC robustness.
+    sim_result      : dict  From simulate().
+    lqr_result      : dict  From compute_lqr().
+    physical_params : dict or None  Physical params dict with keys M,m,e,k,I
+                      for MC robustness.
 
     Returns
     -------
@@ -189,8 +198,8 @@ def lqr_verification(sim_result, lqr_result, cfg_class=None):
         "omega": omega,
     }
 
-    if cfg_class is not None:
-        mc = _monte_carlo_robustness(cfg_class, None, K)
+    if physical_params is not None:
+        mc = _monte_carlo_robustness(physical_params, K)
         _log.info("MC robustness: %.1f%% stable (%d trials)", 100 * mc["success_rate"], mc["N_trials"])
         result["monte_carlo"] = mc
 

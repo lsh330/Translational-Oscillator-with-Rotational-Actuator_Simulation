@@ -1,4 +1,11 @@
-"""Master frequency analysis combining all sub-modules."""
+"""Master frequency analysis combining all sub-modules.
+
+Note: For full-state feedback LQR, the loop transfer L(jw) = K(jwI-A)^{-1}B
+is a SISO surrogate used for robustness assessment.  The gain and phase
+margins computed here are NOT identical to classical output-feedback margins
+and should be interpreted as loop-transfer robustness indicators, not
+direct experimental Bode margins.
+"""
 
 import numpy as np
 

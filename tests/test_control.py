@@ -80,7 +80,7 @@ class TestSlidingModeControl:
         """SMC should reduce state amplitude over time."""
         gains = default_smc_gains(p)
         ctrl = lambda x, th, xd, td: sliding_mode_control(
-            x, th, xd, td, 0.0, p,
+            x, th, xd, td, p,
             gains["c1"], gains["c2"], gains["c3"], gains["eta"], gains["phi"]
         )
         z_final = _simulate_short(ctrl, p, N=50000)
@@ -94,7 +94,7 @@ class TestSlidingModeControl:
 
         s_values = []
         for _ in range(10000):
-            tau = sliding_mode_control(x, theta, xd, td, 0.0, p,
+            tau = sliding_mode_control(x, theta, xd, td, p,
                                        gains["c1"], gains["c2"], gains["c3"],
                                        gains["eta"], gains["phi"])
             tau = max(-0.5, min(0.5, tau))
@@ -109,7 +109,7 @@ class TestSlidingModeControl:
     def test_no_nan(self, p):
         gains = default_smc_gains(p)
         ctrl = lambda x, th, xd, td: sliding_mode_control(
-            x, th, xd, td, 0.0, p,
+            x, th, xd, td, p,
             gains["c1"], gains["c2"], gains["c3"], gains["eta"], gains["phi"]
         )
         z_final = _simulate_short(ctrl, p)

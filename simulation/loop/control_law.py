@@ -21,6 +21,7 @@ def lqr_control(x, theta, x_dot, theta_dot, K_flat):
              + K_flat[2] * x_dot + K_flat[3] * theta_dot)
 
 
+# Utility: available for LQI or integral-action controllers
 @njit(cache=True)
 def lqr_control_antiwindup(x, theta, x_dot, theta_dot, K_flat,
                             tau_max, integrator_state):

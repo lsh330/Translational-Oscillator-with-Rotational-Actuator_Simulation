@@ -15,7 +15,14 @@ _log = get_logger("tora.comparison")
 
 
 def _simulate_controller(controller_fn, z0, p, dt, N, tau_max):
-    """Run a generic simulation loop for comparison."""
+    """Run a generic simulation loop for comparison.
+
+    Note: This uses a simplified RK4 loop without disturbance injection,
+    JIT compilation, or saturation tracking. For exact condition matching
+    with the main pipeline, use simulation.loop.time_loop.simulate() instead.
+    Results are suitable for relative controller comparison but may differ
+    slightly from main pipeline results in absolute values.
+    """
     z_hist = np.zeros((N + 1, 4))
     u_hist = np.zeros(N)
     z_hist[0] = z0
@@ -60,30 +67,47 @@ def _simulate_controller(controller_fn, z0, p, dt, N, tau_max):
 
 
 def _compute_metrics(z_hist, u_hist, dt):
-    """Compute performance metrics."""
+    """Compute comprehensive performance metrics."""
     t = np.arange(len(z_hist)) * dt
-
-    # Settling time (2% band of initial displacement)
     x = z_hist[:, 0]
+    theta = z_hist[:, 1]
+    N = len(u_hist)
+
     x0 = abs(x[0]) if abs(x[0]) > 1e-10 else 0.1
+
+    # Settling time (2% band)
     threshold = 0.02 * x0
     settled = np.where(np.abs(x) > threshold)[0]
     settling_time = t[settled[-1]] if len(settled) > 0 else 0.0
 
     # Overshoot
-    overshoot = (np.max(np.abs(x)) - abs(x[0])) / abs(x[0]) * 100 if abs(x[0]) > 1e-10 else 0.0
+    overshoot = max(0.0, (np.max(np.abs(x)) - x0) / x0 * 100) if x0 > 1e-10 else 0.0
 
-    # Control effort
+    # Integral costs
+    state_integral_x = np.sum(x[:N] ** 2) * dt
+    state_integral_theta = np.sum(theta[:N] ** 2) * dt
     control_effort = np.sum(u_hist ** 2) * dt
+
+    # Peak values
+    peak_theta = np.max(np.abs(theta))
+    peak_theta_dot = np.max(np.abs(z_hist[:, 3]))
+
+    # Saturation fraction (approximate — check if near limits)
+    u_max_observed = np.max(np.abs(u_hist))
 
     # Final state norm
     final_norm = np.linalg.norm(z_hist[-1])
 
     return {
         "settling_time": settling_time,
-        "overshoot_pct": max(0.0, overshoot),
+        "overshoot_pct": overshoot,
         "control_effort": control_effort,
         "final_state_norm": final_norm,
+        "integral_x2": state_integral_x,
+        "integral_theta2": state_integral_theta,
+        "peak_theta": peak_theta,
+        "peak_theta_dot": peak_theta_dot,
+        "peak_torque": u_max_observed,
     }
 
 
@@ -133,7 +157,7 @@ def compare_controllers(p, K_lqr, ilqr_result=None,
 
     def smc_ctrl(x, theta, xd, td):
         return sliding_mode_control(
-            x, theta, xd, td, 0.0, p,
+            x, theta, xd, td, p,
             sg["c1"], sg["c2"], sg["c3"], sg["eta"], sg["phi"]
         )
 
@@ -155,8 +179,8 @@ def compare_controllers(p, K_lqr, ilqr_result=None,
     for name in ["lqr", "energy", "smc", "ilqr"]:
         if name in results and name != "t":
             m = results[name]["metrics"]
-            _log.info("  %-8s  settle=%.2fs  overshoot=%.1f%%  effort=%.4f  final=%.2e",
-                      name.upper(), m["settling_time"], m["overshoot_pct"],
-                      m["control_effort"], m["final_state_norm"])
+            _log.info("  %-8s  settle=%.2fs  effort=%.4f  peak_θ=%.3f  final=%.2e",
+                      name.upper(), m["settling_time"], m["control_effort"],
+                      m["peak_theta"], m["final_state_norm"])
 
     return results

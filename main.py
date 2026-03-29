@@ -85,8 +85,44 @@ def main(argv=None):
     parser = _build_parser()
     args = parser.parse_args(argv)
 
+    # Track which args were explicitly set on CLI
+    # Parse again with no args to get defaults, then compare
+    defaults_ns = parser.parse_args([])
+    explicit = {}
+    for key, val in vars(args).items():
+        default_val = getattr(defaults_ns, key, None)
+        if val != default_val:
+            explicit[key] = val
+
     import logging
     logging.getLogger("tora").setLevel(getattr(logging, args.log_level))
+
+    # Load YAML
+    yaml_cfg = {}
+    if args.config is not None:
+        yaml_cfg = _load_yaml_config(args.config)
+
+    # YAML flat merge
+    sys_p = yaml_cfg.get("system", {})
+    sim_p = yaml_cfg.get("simulation", {})
+    feat_p = yaml_cfg.get("features", {})
+
+    # Apply YAML values only if NOT explicitly set on CLI
+    for key in ["M", "m", "e", "k", "I"]:
+        if key in sys_p and key not in explicit:
+            setattr(args, key, sys_p[key])
+
+    yaml_sim_map = {"t_end": "t_end", "dt": "dt", "x0": "x0", "tau_max": "tau_max",
+                    "dist_amplitude": "dist_amplitude", "dist_bandwidth": "dist_bandwidth",
+                    "seed": "seed"}
+    for ykey, attr in yaml_sim_map.items():
+        if ykey in sim_p and attr not in explicit:
+            setattr(args, attr, sim_p[ykey])
+
+    for key in ["controller", "use_ilqr", "compare_all", "adaptive_q",
+                "ilqr_horizon", "ilqr_iterations"]:
+        if key in feat_p and key not in explicit:
+            setattr(args, key, feat_p[key])
 
     # Validate
     if args.dt <= 0:
@@ -96,43 +132,16 @@ def main(argv=None):
     if args.tau_max < 0:
         print("ERROR: --tau-max must be non-negative"); sys.exit(1)
 
-    # YAML config override
-    if args.config is not None:
-        yaml_cfg = _load_yaml_config(args.config)
-
-        sys_params = yaml_cfg.get("system", {})
-        for key in ["M", "m", "e", "k", "I"]:
-            if key in sys_params and f"--{key}" not in sys.argv:
-                setattr(args, key, sys_params[key])
-
-        sim_params = yaml_cfg.get("simulation", {})
-        yaml_to_attr = {
-            "t_end": "t_end", "dt": "dt", "x0": "x0",
-            "tau_max": "tau_max", "dist_amplitude": "dist_amplitude",
-            "dist_bandwidth": "dist_bandwidth", "seed": "seed",
-        }
-        for ykey, attr in yaml_to_attr.items():
-            if ykey in sim_params:
-                setattr(args, attr, sim_params[ykey])
-
-        feat_params = yaml_cfg.get("features", {})
-        if "controller" in feat_params:
-            args.controller = feat_params["controller"]
-        if feat_params.get("use_ilqr"):
-            args.use_ilqr = True
-        if feat_params.get("compare_all"):
-            args.compare_all = True
-        if feat_params.get("adaptive_q"):
-            args.adaptive_q = True
-
     cfg = SystemConfig(M=args.M, m=args.m, e=args.e, k=args.k, I=args.I)
 
     run(cfg,
         t_end=args.t_end, dt=args.dt, x0=args.x0,
         controller_type=args.controller, tau_max=args.tau_max,
-        dist_amplitude=args.dist_amplitude, dist_bandwidth=args.dist_bandwidth,
+        dist_amplitude=args.dist_amplitude,
+        dist_bandwidth=args.dist_bandwidth,
         seed=args.seed, use_ilqr=args.use_ilqr,
-        ilqr_horizon=args.ilqr_horizon, ilqr_iterations=args.ilqr_iterations,
+        ilqr_horizon=args.ilqr_horizon,
+        ilqr_iterations=args.ilqr_iterations,
         adaptive_q=args.adaptive_q, compare_all=args.compare_all,
         no_display=args.no_display)
 

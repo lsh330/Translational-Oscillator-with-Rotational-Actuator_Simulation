@@ -22,6 +22,31 @@ class SystemConfig:
             if not isinstance(val, (int, float)) or val <= 0:
                 raise ValueError(f"{name} must be a positive number, got {val}")
 
+        # Physical realizability checks
+        Mt = M + m
+        me = m * e
+        I_eff = I + m * e ** 2
+        det_M_min = Mt * I_eff - me ** 2  # min det(M) occurs at theta=0
+        if det_M_min <= 0:
+            raise ValueError(
+                f"Mass matrix singular: det(M) = {det_M_min:.6e} <= 0. "
+                f"Check that I > 0 and m*e^2 < M_t * I_eff."
+            )
+
+        epsilon = me / (Mt * I_eff) ** 0.5
+        if epsilon >= 1.0:
+            raise ValueError(
+                f"Coupling parameter epsilon = {epsilon:.4f} >= 1.0 "
+                f"(system approaches singular configuration)"
+            )
+        elif epsilon > 0.5:
+            import warnings
+            warnings.warn(
+                f"Coupling parameter epsilon = {epsilon:.4f} > 0.5 "
+                f"(strong coupling — weak-coupling assumptions may not hold)",
+                stacklevel=2,
+            )
+
         self.physical = PhysicalParams(M=M, m=m, e=e, k=k, I=I)
         self.derived: DerivedParams = compute_derived(self.physical)
         self._packed: np.ndarray = pack_params(self.derived)

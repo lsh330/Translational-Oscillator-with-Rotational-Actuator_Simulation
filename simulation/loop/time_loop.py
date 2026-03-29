@@ -18,7 +18,8 @@ _log = get_logger("tora.sim")
 
 def simulate(cfg, controller_type="lqr", K=None,
              t_end=20.0, dt=0.001, x0=0.1, tau_max=0.1,
-             dist_amplitude=0.01, dist_bandwidth=5.0, seed=42):
+             dist_amplitude=0.01, dist_bandwidth=5.0, seed=42,
+             dist_channel="torque"):
     """Run a TORA simulation.
 
     Parameters
@@ -32,6 +33,9 @@ def simulate(cfg, controller_type="lqr", K=None,
     dist_amplitude  : float  Disturbance RMS [N*m].
     dist_bandwidth  : float  Disturbance cutoff [Hz].
     seed            : int  Random seed.
+    dist_channel    : str  Disturbance injection point. Currently "torque" only.
+        "torque" — additive torque disturbance on rotor (default, benchmark standard)
+        Future: "cart" for external cart force, "both" for combined.
 
     Returns
     -------

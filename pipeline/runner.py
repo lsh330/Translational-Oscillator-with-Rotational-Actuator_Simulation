@@ -54,7 +54,7 @@ def run(cfg, t_end=20.0, dt=0.001, x0=0.1,
 
     # 1. LQR design
     _log.info("Phase 1: LQR design")
-    lqr_result = compute_lqr(p, use_adaptive_q=adaptive_q)
+    lqr_result = compute_lqr(p, use_adaptive_q=adaptive_q, tau_max=tau_max)
     K = lqr_result["K"]
 
     cl_info = closed_loop_analysis(lqr_result["A"], lqr_result["B"], K)
@@ -70,7 +70,11 @@ def run(cfg, t_end=20.0, dt=0.001, x0=0.1,
     # 3. Analysis
     _log.info("Phase 3: Analysis")
     freq_result = frequency_analysis(lqr_result["A"], lqr_result["B"], K)
-    verification = lqr_verification(sim_result, lqr_result, cfg_class=SystemConfig)
+    physical_params = {
+        "M": cfg.physical.M, "m": cfg.physical.m, "e": cfg.physical.e,
+        "k": cfg.physical.k, "I": cfg.physical.I,
+    }
+    verification = lqr_verification(sim_result, lqr_result, physical_params=physical_params)
 
     # Summary
     print_summary(sim_result, lqr_result, freq_result, verification)

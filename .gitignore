@@ -6,8 +6,7 @@ config.yaml
 *.yaml
 !config.example.yaml
 
-# Images (generated)
-images/
+# Images — tracked for README (regenerate with: python main.py --compare-all --no-display)
 
 # Numba cache
 __pycache__/

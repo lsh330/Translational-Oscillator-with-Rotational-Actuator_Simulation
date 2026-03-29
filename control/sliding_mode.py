@@ -19,20 +19,37 @@ from numba import njit
 
 
 def default_smc_gains(p):
-    """Compute default SMC design parameters.
+    """Compute SMC design parameters using pole-placement on sliding manifold.
 
-    Tuned for the standard benchmark parameters.
+    The sliding surface s = c1*x + c2*theta + c3*x_dot + theta_dot defines
+    a 3rd-order manifold. When s=0, the reduced dynamics have poles at
+    the roots of: lambda^3 + c3*lambda^2 + c2*lambda + c1 = 0
+
+    We place these poles at -omega_d (triple real pole) where omega_d
+    is chosen as a fraction of the natural frequency.
     """
     Mt = p[0]
     k = p[3]
     omega_n = np.sqrt(k / Mt)
 
+    # Desired closed-loop bandwidth on sliding manifold
+    omega_d = 0.3 * omega_n  # conservative: 30% of natural frequency
+
+    # Triple pole at -omega_d: (s + omega_d)^3 = s^3 + 3*omega_d*s^2 + 3*omega_d^2*s + omega_d^3
+    c3 = 3.0 * omega_d           # coefficient of x_dot
+    c2 = 3.0 * omega_d ** 2      # coefficient of theta
+    c1 = omega_d ** 3             # coefficient of x
+
+    # Switching parameters scaled to system dynamics
+    eta = 0.02 * k * 0.1         # ~2% of max spring force at x=0.1
+    phi = 0.05                    # boundary layer width
+
     return {
-        "c1": 0.5 * omega_n,
-        "c2": 5.0,
-        "c3": 1.5,
-        "eta": 0.05,
-        "phi": 0.01,
+        "c1": c1,
+        "c2": c2,
+        "c3": c3,
+        "eta": eta,
+        "phi": phi,
     }
 
 
@@ -54,14 +71,13 @@ def sat(val, phi):
 
 
 @njit(cache=True)
-def sliding_mode_control(x, theta, x_dot, theta_dot, tau_prev, p,
+def sliding_mode_control(x, theta, x_dot, theta_dot, p,
                          c1, c2, c3, eta, phi):
     """Compute SMC torque.
 
     Parameters
     ----------
     x, theta, x_dot, theta_dot : float  State variables.
-    tau_prev : float  Previous control (unused, kept for interface).
     p        : float64[4]  Packed parameters.
     c1, c2, c3 : float  Sliding surface coefficients.
     eta      : float  Switching gain.

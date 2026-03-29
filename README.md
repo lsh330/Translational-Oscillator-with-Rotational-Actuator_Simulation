@@ -4,7 +4,7 @@ Nonlinear optimal control benchmark simulation of the **Translational Oscillator
 
 > **Benchmark system**: All physical parameters follow the **Bupp–Bernstein–Coppola RTAC testbed** (University of Michigan, 1998), the most widely cited experimental benchmark for underactuated nonlinear control [2].
 
-> **v1.0** — Bryson's rule R = 1/τ<sub>max</sub>² for saturation-aware LQR. Symplectic Störmer-Verlet integrator. Coriolis matrix with skew-symmetric passivity verification (Ṁ − 2C). Non-dimensional ε coupling parameter. Anti-windup back-calculation. 70 tests passing.
+> **v1.1** — Bryson's rule R = 1/τ<sub>max</sub>² (saturation-aware LQR, 0% saturation). Leapfrog Störmer-Verlet integrator (bounded energy oscillation). Coriolis matrix Ṁ−2C skew-symmetric passivity verification. Non-dimensional ε coupling parameter. Pole-placement SMC surface design. Optional viscous damping. Physical realizability validation. iLQR final-rollout consistency fix. Config priority: defaults < YAML < CLI. 70 tests passing.
 
 ## Quick Start
 
@@ -220,21 +220,23 @@ This ensures the optimal gains respect the physical torque limit without excessi
 
 Nonlinear trajectory optimization using backward Riccati recursion on the full nonlinear dynamics. Provides time-varying gains that exploit the nonlinear coupling for improved performance.
 
-#### 3.4 Passivity-Based Control (Jankovic 1996)
+#### 3.4 Passivity-Based Control (Jankovic-inspired)
 
-Exploits the TORA's Hamiltonian structure. Control law:
+Structure inspired by Jankovic, Fontaine & Kokotovic (1996) [1], exploiting the TORA's Hamiltonian structure. Control law:
 
 $$\tau = -k_p \theta - k_d \dot{\theta} - k_c p_\theta$$
 
-where p<sub>θ</sub> = me cos θ · ẋ + I<sub>eff</sub>θ̇ is the angular momentum conjugate to θ. The term k<sub>c</sub>p<sub>θ</sub> is the key innovation: it transfers energy from the translational mode to the rotational mode where k<sub>d</sub> can dissipate it.
+where p<sub>θ</sub> = me cos θ · ẋ + I<sub>eff</sub>θ̇ is the angular momentum conjugate to θ. The term k<sub>c</sub>p<sub>θ</sub> transfers energy from the translational mode to the rotational mode where k<sub>d</sub> dissipates it.
 
-#### 3.5 Sliding Mode Control
+**Note**: Default gains are derived from system physical parameters using a principled heuristic (critical damping + natural frequency scaling), not a strict reproduction of the paper's specific gain values. The Lyapunov-like storage function V = ½kx² + p<sub>θ</sub>²/(2I<sub>eff</sub>) + ½k<sub>p</sub>θ² is used for stability monitoring.
 
-Sliding surface: s = c₁x + c₂θ + c₃ẋ + θ̇
+#### 3.5 Sliding Mode Control (Pole-Placement Surface)
+
+Sliding surface s = c₁x + c₂θ + c₃ẋ + θ̇ with coefficients derived from **pole placement** on the reduced-order manifold. When s = 0, the dynamics reduce to a 3rd-order system with triple pole at −ω<sub>d</sub> = −0.3ω<sub>n</sub>.
 
 Control law: τ = τ<sub>eq</sub> − η · sat(s/φ)
 
-where τ<sub>eq</sub> enforces ds/dt = 0, η provides robustness, and the boundary layer φ suppresses chattering.
+where τ<sub>eq</sub> enforces ds/dt = 0, η is scaled to ~2% of max spring force, and the boundary layer φ suppresses chattering.
 
 ### 4. Numerical Methods
 
@@ -244,9 +246,9 @@ Standard 4th-order Runge-Kutta. Two implementations:
 - **Array-based**: for linearization, Jacobian computation, and iLQR
 - **Scalar JIT-compiled**: zero-allocation for the main simulation loop
 
-#### 4.2 Störmer-Verlet Symplectic Integrator
+#### 4.2 Leapfrog Störmer-Verlet Integrator
 
-Preserves the symplectic structure of the Hamiltonian, guaranteeing bounded energy oscillation (no secular drift). Available as an alternative integrator for long-time energy studies.
+For separable Hamiltonians H = T(p) + V(q), Störmer-Verlet is exactly symplectic. The TORA has a **configuration-dependent mass matrix**, so the Hamiltonian is NOT separable — this integrator is therefore not exactly symplectic for this system. However, it provides **bounded energy oscillation** (no secular drift) and serves as a useful alternative to RK4 for long-time energy studies.
 
 #### 4.3 RK4(5) Adaptive Step
 
@@ -271,6 +273,7 @@ dynamics/                    Physics engine
 │   ├── coriolis_vector.py   C(q,q̇) force vector
 │   └── coriolis_matrix.py   Full C matrix + skew-symmetric verification
 ├── spring/spring_force.py   K(q) = [kx, 0]
+├── damping/viscous_damping.py  Optional c_x·ẋ + c_θ·θ̇ viscous losses
 ├── trigonometry.py          Shared sin/cos cache
 └── forward_dynamics/
     ├── forward_dynamics.py       Array version (for Jacobians)
@@ -294,7 +297,7 @@ simulation/                  Simulation engine
 ├── loop/
 │   ├── time_loop.py         High-level simulate() dispatcher
 │   ├── time_loop_fast.py    Per-controller @njit loops
-│   └── control_law.py       Inline control + anti-windup
+│   └── control_law.py       Inline control (anti-windup utility available for LQI)
 ├── integrator/
 │   ├── rk4_step.py          Array + scalar RK4
 │   ├── rk45_step.py         Dormand-Prince adaptive
@@ -337,6 +340,50 @@ pipeline/                    Orchestration
 ├── defaults.py              Default parameters
 └── save_outputs.py          PNG/GIF export
 ```
+
+## Simulation Results
+
+All figures generated by `python main.py --compare-all --no-display` with default benchmark parameters.
+
+### Animation
+
+![TORA Animation](images/tora_animation.gif)
+
+Cart-spring-rotor system with LQR control. The eccentric mass (red dot) drives the cart vibration to zero through rotational coupling.
+
+### Dynamics Overview
+
+![Dynamics](images/dynamics.png)
+
+**Top row**: Cart displacement x and rotor angle θ — both decay as LQR dissipates energy. **Middle row**: Velocities showing the coupled oscillation. **Bottom-left**: Total energy H = T + V decreasing monotonically under control (Hamiltonian would be constant without control). **Bottom-right**: Normalized coupling strength cos(θ) with control torque overlay — coupling varies as rotor rotates.
+
+### Control Analysis
+
+![Control](images/control.png)
+
+**Top-left**: Control torque τ(t) with envelope showing decay — 0% saturation with Bryson's rule R = 1/τ<sub>max</sub>². **Top-right**: Torque frequency spectrum concentrated at the natural frequency (~1.8 Hz). **Bottom**: Open-loop Bode magnitude and phase with gain crossover at ω<sub>g</sub> = 28.3 rad/s and **PM = 75.7°**.
+
+> **Note**: These loop-transfer margins are computed from L(jω) = K(jωI−A)⁻¹B, a SISO surrogate for the full-state feedback system. They serve as robustness indicators, not direct experimental Bode margins.
+
+### LQR Verification Suite
+
+![LQR Verification](images/lqr_verification.png)
+
+**Top-left**: Lyapunov function V(t) = z<sup>T</sup>Pz decaying over time. **Top-right**: Cost breakdown — state cost dominates control cost (ratio ~5.5:1). **Middle-left**: Kalman return difference |1+L(jω)| ≥ 1 verified (min = 1.0002 — near theoretical lower bound). **Middle-right**: Closed-loop pole map — all poles in LHP. **Bottom-left**: Monte Carlo robustness histogram — **100% stable** across 200 random parameter perturbations (±10% mass/spring, ±5% eccentricity). **Bottom-right**: Damping ratios for each closed-loop pole.
+
+### Phase Portraits
+
+![Phase Portraits](images/phase_portraits.png)
+
+**Left**: (x, θ) configuration space — trajectory spirals from initial displacement toward equilibrium, colored by time (yellow→purple). **Right**: (ẋ, θ̇) velocity space — shows the characteristic TORA coupling where rotor velocity θ̇ is much larger than cart velocity ẋ due to weak coupling (ε ≈ 0.2).
+
+### Controller Comparison
+
+![Comparison](images/comparison.png)
+
+Side-by-side comparison of LQR, passivity-based (energy), and sliding mode controllers. **Top row**: Cart displacement and rotor angle responses. **Bottom-left**: Control torque profiles showing different strategies. **Bottom-right**: Performance metrics — LQR offers the best settling time, energy-based uses least control effort, SMC has smallest peak θ.
+
+---
 
 ## Analysis Features
 

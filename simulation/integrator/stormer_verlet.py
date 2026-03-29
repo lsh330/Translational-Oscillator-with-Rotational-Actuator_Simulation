@@ -1,10 +1,14 @@
-"""Störmer-Verlet symplectic integrator for TORA.
+"""Leapfrog-style (Störmer-Verlet) explicit integrator for TORA.
 
-Preserves the symplectic structure of the Hamiltonian system,
-guaranteeing near-machine-precision energy conservation over
-exponentially long integration times.
+For separable Hamiltonians H = T(p) + V(q), this method is exactly
+symplectic.  The TORA has a configuration-dependent mass matrix,
+so the Hamiltonian is NOT separable — this integrator is therefore
+NOT exactly symplectic for this system.
 
-Algorithm (leapfrog / velocity Verlet):
+However, it still provides bounded energy oscillation (no secular drift)
+and serves as a useful alternative to RK4 for long-time energy studies.
+
+Algorithm (velocity Verlet):
     1. q_{n+1/2} = q_n + (dt/2) * dq_n
     2. dq_{n+1} = dq_n + dt * ddq(q_{n+1/2}, dq_n, tau)
     3. q_{n+1} = q_{n+1/2} + (dt/2) * dq_{n+1}

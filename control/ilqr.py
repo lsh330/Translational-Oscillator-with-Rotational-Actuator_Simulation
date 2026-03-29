@@ -175,6 +175,14 @@ def ilqr(p, dt, horizon, max_iter=15, tol=1e-4, z0=None):
 
         u_traj = u_new
 
+    # Final rollout with the converged control sequence
+    z_traj = np.zeros((N + 1, 4))
+    z_traj[0] = z0
+    for i in range(N):
+        q, dq = _state_unpack(z_traj[i])
+        q_next, dq_next = _rk4_step(q, dq, u_traj[i], p, dt)
+        z_traj[i + 1] = _state_pack(q_next, dq_next)
+
     converged = len(cost_history) > 1 and (
         (cost_history[-2] - cost_history[-1]) / (abs(cost_history[-2]) + 1e-12) < tol
     )

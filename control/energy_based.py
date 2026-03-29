@@ -1,20 +1,19 @@
 """Passivity-based energy shaping controller for the TORA.
 
-Based on the approach of Jankovic, Fontaine & Kokotovic (1996),
+Inspired by the approach of Jankovic, Fontaine & Kokotovic (1996),
 "TORA Example: Cascade- and Passivity-Based Control Designs",
 IEEE Trans. Control Systems Technology, 4(3), 292-297.
 
-The controller exploits the TORA's Hamiltonian structure:
-    H = 0.5 * dq^T M(q) dq + 0.5 * k * x^2
+The controller structure exploits the TORA's Hamiltonian structure.
+Default gains are computed from system physical parameters using a
+principled heuristic (not a strict reproduction of the paper's
+specific gain values).
 
 Control law:
     tau = -kp * theta - kd * theta_dot - kc * p_theta
 
 where p_theta = me*cos(theta)*x_dot + I_eff*theta_dot is the
 angular momentum conjugate to theta.
-
-The gains kp, kd provide PD regulation of the rotor angle,
-and kc provides damping injection through the coupled momentum.
 """
 
 import numpy as np
@@ -90,11 +89,14 @@ def energy_based_control(x, theta, x_dot, theta_dot, p, kp, kd, kc):
 
 @njit(cache=True)
 def energy_lyapunov(x, theta, x_dot, theta_dot, p, kp):
-    """Evaluate the Lyapunov function for stability verification.
+    """Evaluate the Lyapunov-like storage function for stability verification.
 
-    V = 0.5*k*x^2 + 0.5*(me*cos(theta)*x_dot + I_eff*theta_dot)^2
-      + 0.5*kp*theta^2
+    V = 0.5*k*x^2 + p_theta^2 / (2*I_eff) + 0.5*kp*theta^2
 
+    where p_theta = me*cos(theta)*x_dot + I_eff*theta_dot.
+
+    Note: This is a Lyapunov-like storage function, not a physical energy.
+    The kp*theta^2 term represents a virtual potential from the controller.
     V_dot <= 0 along trajectories under the passivity-based law.
     """
     me = p[1]
@@ -103,5 +105,5 @@ def energy_lyapunov(x, theta, x_dot, theta_dot, p, kp):
 
     p_theta = me * np.cos(theta) * x_dot + I_eff * theta_dot
 
-    V = 0.5 * k * x * x + 0.5 * p_theta * p_theta + 0.5 * kp * theta * theta
+    V = 0.5 * k * x * x + 0.5 * p_theta * p_theta / I_eff + 0.5 * kp * theta * theta
     return V

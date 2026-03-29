@@ -129,7 +129,7 @@ def _run_loop_smc(N, dt, x0, theta0, xd0, td0, p,
     td_hist[0] = td
 
     for i in range(N):
-        tau = sliding_mode_control(x, theta, xd, td, 0.0, p,
+        tau = sliding_mode_control(x, theta, xd, td, p,
                                    c1, c2, c3, eta, phi)
         tau += disturbance[i]
         s_hist[i] = sliding_surface(x, theta, xd, td, c1, c2, c3)
