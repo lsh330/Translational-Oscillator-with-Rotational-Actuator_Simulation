@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+
+# YAML config (keep example, ignore user configs)
+config.yaml
+*.yaml
+!config.example.yaml
+
+# Images (generated)
+images/
+
+# Numba cache
+__pycache__/
+
+# IDE
+.vscode/
+.idea/

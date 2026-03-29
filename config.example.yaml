@@ -1,0 +1,26 @@
+# TORA Nonlinear Optimal Control -- Example Configuration
+# Copy to config.yaml and customize. Run: python main.py --config config.yaml
+
+system:
+  M: 1.3608              # Cart mass [kg]
+  m: 0.096               # Rotor mass [kg]
+  e: 0.0592              # Eccentricity [m]
+  k: 186.3               # Spring constant [N/m]
+  I: 0.0002175           # Rotor inertia [kg*m^2]
+
+simulation:
+  t_end: 20.0            # Simulation duration [s]
+  dt: 0.001              # Integration time step [s]
+  x0: 0.1                # Initial cart displacement [m]
+  tau_max: 0.1           # Torque saturation [N*m]
+  dist_amplitude: 0.01   # Disturbance RMS [N*m]
+  dist_bandwidth: 5.0    # Noise cutoff frequency [Hz]
+  seed: 42               # Random seed
+
+features:
+  controller: "lqr"           # "lqr", "energy", or "smc"
+  use_ilqr: false              # Enable iLQR trajectory optimization
+  ilqr_horizon: 1000           # iLQR planning horizon steps
+  ilqr_iterations: 15          # iLQR iteration count
+  compare_all: false           # Run all 4 controllers for comparison
+  adaptive_q: false            # Use Bryson's rule Q matrix
